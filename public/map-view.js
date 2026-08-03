@@ -11,6 +11,7 @@
   const heatmapLegendEl = document.getElementById('heatmap-legend');
   const heatmapLegendMinEl = document.getElementById('heatmap-legend-min');
   const heatmapLegendMaxEl = document.getElementById('heatmap-legend-max');
+  const heatmapDownloadAllBtn = document.getElementById('heatmap-download-all');
 
   window.emotionMapperState = window.emotionMapperState || {};
   const state = window.emotionMapperState;
@@ -68,6 +69,7 @@
   heatmapEmotionEl.addEventListener('change', () => {
     if (heatmapToggle.checked) loadHeatmap();
   });
+  heatmapDownloadAllBtn.addEventListener('click', downloadAllHeatmaps);
 
   async function loadWorkspace() {
     if (!state.projectId) return;
@@ -157,6 +159,38 @@
   window.emotionMapperRefreshHeatmapIfOn = function () {
     if (heatmapToggle.checked) loadHeatmap();
   };
+
+  async function downloadAllHeatmaps() {
+    if (!state.projectId) return;
+    heatmapDownloadAllBtn.disabled = true;
+    heatmapStatusEl.innerHTML = '<span class="spinner"></span>Preparing zip…';
+    try {
+      const res = await fetch(`/heatmap/all?projectId=${encodeURIComponent(state.projectId)}`);
+      if (!res.ok) {
+        if (res.status === 422) {
+          heatmapStatusEl.textContent = 'No scored/placed data yet.';
+        } else {
+          const data = await res.json().catch(() => ({}));
+          heatmapStatusEl.textContent = 'Error: ' + (data.error || `HTTP ${res.status}`);
+        }
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `emotion-mapper-heatmaps-${state.projectId}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      heatmapStatusEl.textContent = 'Downloaded all heatmaps.';
+    } catch (e) {
+      heatmapStatusEl.textContent = 'Error: ' + e.message;
+    } finally {
+      heatmapDownloadAllBtn.disabled = false;
+    }
+  }
 
   function getThumb(photo) {
     let img = thumbCache.get(photo.id);

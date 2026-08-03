@@ -9,6 +9,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const multer = require('multer');
+const archiver = require('archiver');
 const { Worker } = require('worker_threads');
 
 const jobs = require('./jobs');
@@ -611,6 +612,60 @@ router.delete('/photos/:id', (req, res) => {
   res.json({ ok: true });
 });
 
+// Builds the PNG for a single emotion/score dimension of a project's heatmap.
+// Shared by GET /heatmap (one dimension) and GET /heatmap/all (all dimensions,
+// zipped). Returns null if there's nothing scored/placed to render yet.
+function renderHeatmapForEmotion(project, emotion) {
+  const { wallSegments } = project.dxf.parsed;
+
+  // Build measurementPoints from placements, scores from photo averages
+  const measurementPoints = {};
+  const scores = {};
+  for (const [photoId, placement] of Object.entries(project.placements)) {
+    const photo = photos.get(photoId);
+    if (!photo) continue;
+    const code = placement.code || photoId;
+    measurementPoints[code] = [placement.x, placement.y];
+
+    const rows = Object.values(photo.scores).filter(r => !r.error);
+    if (rows.length === 0) continue;
+
+    let value;
+    if (emotion === 'positive_affect' || emotion === 'positive_affect_score') {
+      value = average(rows.map(r => r.positive_affect_score));
+    } else if (emotion === 'negative_affect' || emotion === 'negative_affect_score') {
+      value = average(rows.map(r => r.negative_affect_score));
+    } else if (emotion === 'pa_minus_na' || emotion === 'net_affect_score') {
+      value = average(rows.map(r => r.net_affect_score));
+    } else {
+      value = average(rows.map(r => r[emotion]).filter(v => v !== undefined));
+    }
+    if (value !== undefined && !Number.isNaN(value)) scores[code] = value;
+  }
+
+  // Fixed ranges (not auto-scaled from this run's data) so the red/yellow/green
+  // scale means the same thing across renders: yellow is always "neutral".
+  // PA/NA are sums of 10 PANAS items scored 1-5 each (range 10-50, neutral 30);
+  // net affect (PA-NA) ranges -40..40 with neutral at 0.
+  let vmin, vmax;
+  if (emotion === 'pa_minus_na' || emotion === 'net_affect_score') {
+    vmin = -40; vmax = 40;
+  } else if (PANAS_POSITIVE.includes(emotion) || PANAS_NEGATIVE.includes(emotion)) {
+    vmin = 1; vmax = 5;
+  } else {
+    vmin = 10; vmax = 50;
+  }
+
+  return renderHeatmap({
+    wallSegments,
+    measurementPoints,
+    scores,
+    bounds: project.dxf.bounds,
+    vmin,
+    vmax,
+  });
+}
+
 // ---------------------------------------------------------------------------
 // GET /heatmap?floor=&emotion=&projectId=
 // ---------------------------------------------------------------------------
@@ -622,54 +677,7 @@ router.get('/heatmap', (req, res) => {
       return res.status(400).json({ error: 'project with an imported DXF plan is required' });
     }
 
-    const { wallSegments } = project.dxf.parsed;
-
-    // Build measurementPoints from placements, scores from photo averages
-    const measurementPoints = {};
-    const scores = {};
-    for (const [photoId, placement] of Object.entries(project.placements)) {
-      const photo = photos.get(photoId);
-      if (!photo) continue;
-      const code = placement.code || photoId;
-      measurementPoints[code] = [placement.x, placement.y];
-
-      const rows = Object.values(photo.scores).filter(r => !r.error);
-      if (rows.length === 0) continue;
-
-      let value;
-      if (emotion === 'positive_affect' || emotion === 'positive_affect_score') {
-        value = average(rows.map(r => r.positive_affect_score));
-      } else if (emotion === 'negative_affect' || emotion === 'negative_affect_score') {
-        value = average(rows.map(r => r.negative_affect_score));
-      } else if (emotion === 'pa_minus_na' || emotion === 'net_affect_score') {
-        value = average(rows.map(r => r.net_affect_score));
-      } else {
-        value = average(rows.map(r => r[emotion]).filter(v => v !== undefined));
-      }
-      if (value !== undefined && !Number.isNaN(value)) scores[code] = value;
-    }
-
-    // Fixed ranges (not auto-scaled from this run's data) so the red/yellow/green
-    // scale means the same thing across renders: yellow is always "neutral".
-    // PA/NA are sums of 10 PANAS items scored 1-5 each (range 10-50, neutral 30);
-    // net affect (PA-NA) ranges -40..40 with neutral at 0.
-    let vmin, vmax;
-    if (emotion === 'pa_minus_na' || emotion === 'net_affect_score') {
-      vmin = -40; vmax = 40;
-    } else if (PANAS_POSITIVE.includes(emotion) || PANAS_NEGATIVE.includes(emotion)) {
-      vmin = 1; vmax = 5;
-    } else {
-      vmin = 10; vmax = 50;
-    }
-
-    const png = renderHeatmap({
-      wallSegments,
-      measurementPoints,
-      scores,
-      bounds: project.dxf.bounds,
-      vmin,
-      vmax,
-    });
+    const png = renderHeatmapForEmotion(project, emotion);
 
     if (!png) {
       return res.status(422).json({ error: 'No scored/placed data available to render a heatmap yet.' });
@@ -677,6 +685,43 @@ router.get('/heatmap', (req, res) => {
 
     res.set('Content-Type', 'image/png');
     res.send(png);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /heatmap/all?projectId=
+// Zips up every PANAS dimension's heatmap (PA, NA, PA-NA, and each of the 20
+// individual items) into a single downloadable archive.
+// ---------------------------------------------------------------------------
+router.get('/heatmap/all', (req, res) => {
+  try {
+    const { projectId } = req.query;
+    const project = projects.get(projectId);
+    if (!project || !project.dxf) {
+      return res.status(400).json({ error: 'project with an imported DXF plan is required' });
+    }
+
+    const emotions = ['positive_affect', 'negative_affect', 'pa_minus_na', ...PANAS_POSITIVE, ...PANAS_NEGATIVE];
+    const rendered = emotions
+      .map(emotion => ({ emotion, png: renderHeatmapForEmotion(project, emotion) }))
+      .filter(({ png }) => png);
+
+    if (rendered.length === 0) {
+      return res.status(422).json({ error: 'No scored/placed data available to render a heatmap yet.' });
+    }
+
+    res.set('Content-Type', 'application/zip');
+    res.set('Content-Disposition', `attachment; filename="${projectId}-heatmaps.zip"`);
+
+    const archive = archiver('zip', { zlib: { level: 9 } });
+    archive.on('error', err => res.status(500).json({ error: err.message }));
+    archive.pipe(res);
+    for (const { emotion, png } of rendered) {
+      archive.append(png, { name: `${emotion}.png` });
+    }
+    archive.finalize();
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
