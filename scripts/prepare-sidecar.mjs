@@ -28,6 +28,7 @@ console.log('Running npm ci --omit=dev inside staged resources (builds native ca
 execFileSync('npm', ['ci', '--omit=dev'], { cwd: resourcesDir, stdio: 'inherit', shell: process.platform === 'win32' });
 
 pruneSharpVariants(resourcesDir);
+prunePrebuildifyVariants(resourcesDir);
 
 console.log(`Sidecar resources staged at ${resourcesDir}`);
 
@@ -46,5 +47,41 @@ function pruneSharpVariants(dir) {
     if (!name.startsWith('sharp-') || name.endsWith(targetSuffix)) continue;
     rmSync(path.join(imgDir, name), { recursive: true, force: true });
     console.log(`Pruned non-target sharp variant: @img/${name}`);
+  }
+}
+
+// Same class of problem as pruneSharpVariants above, but for the generic
+// "prebuildify" layout (node_modules/<pkg>/prebuilds/<platform>-<arch>/...)
+// used by e.g. bare-fs/bare-path/bare-url (pulled in transitively via
+// archiver -> tar-stream). Those ship a prebuilt native binary for every
+// platform/arch, including non-Linux/Windows ones (android-*, ios-*, ...)
+// that aren't valid ELF/PE at all. linuxdeploy recursively runs `ldd` on
+// every binary under the bundled resources and hard-crashes (uncaught C++
+// exception, aborting the whole build) the moment it hits one `ldd` can't
+// parse — so every prebuild except the host's own must be removed first.
+function prunePrebuildifyVariants(dir) {
+  const targetSuffix = process.platform === 'win32' ? 'win32-x64' : 'linux-x64';
+  const nodeModulesDir = path.join(dir, 'node_modules');
+  if (!existsSync(nodeModulesDir)) return;
+
+  function pruneIn(pkgDir) {
+    const prebuildsDir = path.join(pkgDir, 'prebuilds');
+    if (!existsSync(prebuildsDir)) return;
+    for (const name of readdirSync(prebuildsDir)) {
+      if (name === targetSuffix) continue;
+      rmSync(path.join(prebuildsDir, name), { recursive: true, force: true });
+      console.log(`Pruned non-target prebuild: ${path.relative(dir, pkgDir)}/prebuilds/${name}`);
+    }
+  }
+
+  for (const name of readdirSync(nodeModulesDir)) {
+    const entryPath = path.join(nodeModulesDir, name);
+    if (name.startsWith('@')) {
+      for (const scopedName of readdirSync(entryPath)) {
+        pruneIn(path.join(entryPath, scopedName));
+      }
+    } else {
+      pruneIn(entryPath);
+    }
   }
 }
