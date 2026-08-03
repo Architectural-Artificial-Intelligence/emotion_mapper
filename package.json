@@ -1,0 +1,30 @@
+{
+  "name": "emotion-mapper",
+  "version": "1.0.0",
+  "description": "Emotion Mapper prototype — Node/Express server wrapping the 360-PANAS pipeline and heatmap.py port",
+  "main": "server/app.js",
+  "scripts": {
+    "start": "node server/app.js",
+    "server": "node server/app.js",
+    "test": "node server/heatmap/dxf.test.js",
+    "tauri": "tauri",
+    "prepare:sidecar": "node scripts/prepare-sidecar.mjs && node scripts/fetch-node-runtime.mjs",
+    "tauri:dev": "npm run prepare:sidecar && tauri dev",
+    "tauri:build": "npm run prepare:sidecar && tauri build"
+  },
+  "dependencies": {
+    "canvas": "^3.2.3",
+    "dxf-parser": "^1.1.2",
+    "express": "^4.19.2",
+    "multer": "^1.4.5-lts.1",
+    "sharp": "^0.34.5"
+  },
+  "devDependencies": {
+    "@tauri-apps/api": "^2",
+    "@tauri-apps/cli": "^2"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "license": "MIT"
+}

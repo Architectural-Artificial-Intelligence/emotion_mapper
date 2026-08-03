@@ -1,0 +1,43 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Emotion Mapper",
+  "version": "1.0.0",
+  "identifier": "com.emotionmapper.desktop",
+  "build": {
+    "frontendDist": "placeholder"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Emotion Mapper",
+        "width": 1400,
+        "height": 900,
+        "url": "index.html"
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["deb", "appimage", "msi", "nsis"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico",
+      "icons/icon.icns"
+    ],
+    "resources": [
+      "resources/server/**/*",
+      "resources/public/**/*",
+      "resources/node_modules/**/*",
+      "resources/package.json"
+    ],
+    "externalBin": [
+      "binaries/node"
+    ]
+  }
+}

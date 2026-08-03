@@ -1,0 +1,21 @@
+node_modules/
+
+# runtime data (settings.json holds API keys; projects/ is user-uploaded content)
+data/
+
+# stray local secret file
+key
+
+# OS / editor
+.DS_Store
+*.swp
+
+# logs
+npm-debug.log*
+
+# Tauri build artifacts — assembled fresh per build, contain platform-specific
+# native binaries that must never be committed or reused cross-platform
+src-tauri/target/
+src-tauri/resources/
+src-tauri/binaries/
+src-tauri/gen/

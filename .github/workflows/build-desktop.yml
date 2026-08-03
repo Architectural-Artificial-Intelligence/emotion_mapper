@@ -1,0 +1,67 @@
+name: Build Desktop Installers
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            rust_target: x86_64-pc-windows-msvc
+            node_platform: win
+            node_arch: x64
+          - os: ubuntu-latest
+            rust_target: x86_64-unknown-linux-gnu
+            node_platform: linux
+            node_arch: x64
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_target }}
+
+      - name: Install Linux system dependencies for Tauri
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf build-essential file libssl-dev
+
+      - name: npm ci (builds native canvas/sharp for this OS, installs Tauri CLI)
+        run: npm ci
+
+      - name: Stage sidecar resources + Node runtime
+        run: node scripts/prepare-sidecar.mjs && node scripts/fetch-node-runtime.mjs
+        env:
+          NODE_PLATFORM: ${{ matrix.node_platform }}
+          NODE_ARCH: ${{ matrix.node_arch }}
+          RUST_TARGET: ${{ matrix.rust_target }}
+
+      - name: Build Tauri app
+        run: npx tauri build
+
+      - name: Collect installer artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: emotion-mapper-${{ matrix.rust_target }}
+          path: |
+            src-tauri/target/release/bundle/msi/*.msi
+            src-tauri/target/release/bundle/nsis/*.exe
+            src-tauri/target/release/bundle/deb/*.deb
+            src-tauri/target/release/bundle/appimage/*.AppImage
+          if-no-files-found: warn

@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Emotion Mapper</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<header id="top-bar">
+  <a href="#" id="topbar-projects-link">Projects</a>
+  <span id="topbar-current-project"></span>
+  <button id="topbar-settings-gear" title="Jump to SDK settings">&#9881;</button>
+</header>
+
+<section id="dashboard" class="active">
+  <div class="page-pad">
+  <h2>Projects</h2>
+  <button class="action" id="dashboard-new-project">+ New Project</button>
+  <div class="project-grid" id="dashboard-grid"></div>
+  <div class="status" id="dashboard-status"></div>
+  </div>
+</section>
+
+<div id="app-layout">
+  <aside id="side-panel">
+    <section id="panel-sdk">
+      <h3>SDK<span class="section-check" id="check-apikey" title="API key set"></span></h3>
+      <label>Provider</label>
+      <select id="settings-provider">
+        <option value="openai">OpenAI</option>
+        <option value="anthropic">Anthropic</option>
+      </select>
+      <label>API Key</label>
+      <input type="password" id="settings-apikey" placeholder="sk-..." />
+      <label>Model</label>
+      <select id="settings-model" required>
+        <option value="">Enter API key, then load models&hellip;</option>
+      </select>
+      <button class="secondary" id="settings-load-models" type="button">Load available models</button>
+      <button class="action" id="settings-save">Save</button>
+      <div class="status" id="settings-status"></div>
+    </section>
+
+    <section id="panel-plan-summary">
+      <h3>Plan<span class="section-check" id="check-plan" title="Plan uploaded"></span></h3>
+      <div id="plan-summary-text" class="muted-text">No plan imported</div>
+      <button class="secondary" id="plan-edit-btn">Edit plan&hellip;</button>
+    </section>
+
+    <section id="panel-unplaced">
+      <h3>Photos<span class="section-check" id="check-images" title="Images uploaded"></span></h3>
+      <div class="upload-tile">
+        <label style="margin:0 0 4px;">360&deg; image(s)</label>
+        <input type="file" id="placement-images" accept=".jpg,.jpeg,.png,.tif,.tiff,.heic,.heif" multiple />
+        <button class="action" id="placement-ingest" style="width:100%;">Upload &amp; process</button>
+      </div>
+      <div class="status" id="placement-status"></div>
+      <div id="unplaced-list" class="unplaced-list"></div>
+    </section>
+
+    <section id="panel-heatmap-controls">
+      <h3>Heatmap<span class="section-check" id="check-heatmap" title="Heatmap generated"></span></h3>
+      <label class="inline-label"><input type="checkbox" id="heatmap-toggle" /> Show heatmap overlay</label>
+      <label>Emotion</label>
+      <select id="heatmap-emotion">
+        <option value="positive_affect">Positive Affect</option>
+        <option value="negative_affect">Negative Affect</option>
+        <option value="pa_minus_na">PA - NA</option>
+        <optgroup label="Positive items">
+          <option value="interested">Interested</option>
+          <option value="excited">Excited</option>
+          <option value="strong">Strong</option>
+          <option value="enthusiastic">Enthusiastic</option>
+          <option value="proud">Proud</option>
+          <option value="alert">Alert</option>
+          <option value="inspired">Inspired</option>
+          <option value="determined">Determined</option>
+          <option value="attentive">Attentive</option>
+          <option value="active">Active</option>
+        </optgroup>
+        <optgroup label="Negative items">
+          <option value="distressed">Distressed</option>
+          <option value="upset">Upset</option>
+          <option value="guilty">Guilty</option>
+          <option value="scared">Scared</option>
+          <option value="hostile">Hostile</option>
+          <option value="irritable">Irritable</option>
+          <option value="ashamed">Ashamed</option>
+          <option value="nervous">Nervous</option>
+          <option value="jittery">Jittery</option>
+          <option value="afraid">Afraid</option>
+        </optgroup>
+      </select>
+      <div id="heatmap-legend" class="heatmap-legend" hidden>
+        <span id="heatmap-legend-max" class="heatmap-legend-label"></span>
+        <div class="heatmap-legend-bar"></div>
+        <span id="heatmap-legend-min" class="heatmap-legend-label"></span>
+      </div>
+      <div class="status" id="heatmap-status"></div>
+    </section>
+  </aside>
+
+  <div id="map-wrap">
+    <canvas id="map-canvas"></canvas>
+    <button class="fit-btn" id="map-fit">Fit to view</button>
+  </div>
+</div>
+
+<!-- Plan modal: DXF import + wall-layer picker -->
+<div id="plan-modal" class="modal hidden">
+  <div class="modal-backdrop" data-close-modal="plan-modal"></div>
+  <div class="modal-dialog">
+    <h2>Plan</h2>
+    <label>DXF file</label>
+    <input type="file" id="plan-dxf-file" accept=".dxf" />
+    <button class="action" id="plan-import">Import DXF</button>
+    <div class="status" id="plan-status"></div>
+    <div id="plan-layer-panel" style="display:none;"></div>
+    <div class="modal-actions">
+      <button class="secondary" data-close-modal="plan-modal">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Rename project modal -->
+<div id="rename-modal" class="modal hidden">
+  <div class="modal-backdrop" data-close-modal="rename-modal"></div>
+  <div class="modal-dialog modal-dialog-sm">
+    <h2>Rename project</h2>
+    <input type="text" id="rename-input" />
+    <div class="modal-actions">
+      <button class="action" id="rename-save">Save</button>
+      <button class="secondary" data-close-modal="rename-modal">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script src="state.js"></script>
+<script src="progress.js"></script>
+<script src="selection-link.js"></script>
+<script src="canvas-pan-zoom.js"></script>
+<script src="modal.js"></script>
+<script src="app-shell.js"></script>
+<script src="dashboard.js"></script>
+<script src="settings.js"></script>
+<script src="plan-modal.js"></script>
+<script src="side-panel.js"></script>
+<script src="map-view.js"></script>
+</body>
+</html>
