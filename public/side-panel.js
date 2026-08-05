@@ -149,8 +149,12 @@
     try {
       const res = await fetch('/settings/vlm-config');
       const data = await res.json();
-      apiKeySet = !!(res.ok && data.apiKeySet);
-      vlmConfigured = !!(res.ok && data.apiKeySet && data.provider && data.model);
+      apiKeySet = !!(res.ok && (data.apiKeySet || (data.provider === 'custom-openai' && data.baseUrl)));
+      if (data.provider === 'custom-openai') {
+        vlmConfigured = !!(res.ok && data.baseUrl && data.model);
+      } else {
+        vlmConfigured = !!(res.ok && data.apiKeySet && data.provider && data.model);
+      }
     } catch (e) {
       apiKeySet = false;
       vlmConfigured = false;
@@ -161,7 +165,7 @@
     if (!vlmConfigured) {
       statusEl.textContent = apiKeySet
         ? 'Choose a model in Settings before uploading photos.'
-        : 'Set an API key and model in Settings before uploading photos.';
+        : 'Configure VLM provider in Settings before uploading photos.';
     } else if (/before uploading photos\.$/.test(statusEl.textContent)) {
       statusEl.textContent = '';
     }

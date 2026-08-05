@@ -36,9 +36,9 @@ Steps 1–2 run in `worker_threads` (`server/converter-worker.js`) for paralleli
 A pluggable interface so the backend is swappable per request or via stored settings:
 
 - `server/vlm/panas-prompt.js` — the PANAS prompt text, item lists, and response parsing, shared by every provider so scoring semantics stay identical regardless of backend.
-- `server/vlm/openai.js`, `server/vlm/anthropic.js` — one file per provider, each implementing `scoreImage(imagePath, config)`.
-- `server/vlm/index.js` — dispatches on `config.provider` (`PROVIDERS` map).
-- Provider + API key + optional model override are stored via `POST /settings/vlm-config` → `data/settings.json`, and can also be overridden per-request in the `POST /photos/:id/score` body.
+- `server/vlm/openai.js`, `server/vlm/anthropic.js`, `server/vlm/custom-openai.js` — one file per provider, each implementing `scoreImage(imagePath, config)`. `custom-openai.js` supports custom base URLs (e.g. Ollama, vLLM, Together) with optional API keys.
+- `server/vlm/index.js` — dispatches on `config.provider` (`PROVIDERS` map: `openai`, `anthropic`, `custom-openai`).
+- Provider + API key + optional model override (and `baseUrl` for custom endpoints) are stored via `POST /settings/vlm-config` → `data/settings.json`, and can also be overridden per-request in the `POST /photos/:id/score` body.
 
 ### Heatmap (`server/heatmap/`)
 

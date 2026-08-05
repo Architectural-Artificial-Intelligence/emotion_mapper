@@ -366,7 +366,7 @@ async function scorePhoto(photo, config) {
   const allFailed = orderedRows.length > 0 && orderedRows.every(r => r.error);
   if (allFailed) {
     photo.status = 'error';
-    photo.error = rows[0].error;
+    photo.error = orderedRows[0].error;
   } else {
     photo.status = 'scored';
   }
@@ -383,17 +383,22 @@ function resolveVlmConfig(body) {
     provider: body?.provider || settings.provider || 'openai',
     apiKey: body?.apiKey || settings.apiKey,
     model: body?.model || settings.model,
+    baseUrl: body?.baseUrl || settings.baseUrl,
   };
 }
 
-// Every VLM call needs all three of these; a partially-configured provider
-// (e.g. a key saved before model selection was made mandatory) must block
+// Every VLM call needs configuration; a partially-configured provider
+// (e.g. missing API key or Base URL) must block
 // uploads instead of failing later inside the async scoring job.
 function missingVlmConfigError(config) {
   if (!vlm.PROVIDERS[config.provider]) {
-    return `Unknown or unset VLM provider: ${config.provider}. Expected "openai" or "anthropic".`;
+    return `Unknown or unset VLM provider: ${config.provider}. Expected "openai", "anthropic", or "custom-openai".`;
   }
-  if (!config.apiKey) {
+  if (config.provider === 'custom-openai') {
+    if (!config.baseUrl) {
+      return 'No Base URL configured for custom provider. POST /settings/vlm-config first, or pass baseUrl in body.';
+    }
+  } else if (!config.apiKey) {
     return 'No API key configured. POST /settings/vlm-config first, or pass apiKey in body.';
   }
   if (!config.model) {
@@ -744,41 +749,52 @@ function average(arr) {
 }
 
 // ---------------------------------------------------------------------------
-// POST /settings/vlm-config — { provider, apiKey, model } -> local JSON file
+// POST /settings/vlm-config — { provider, apiKey, model, baseUrl } -> local JSON file
 // ---------------------------------------------------------------------------
 router.post('/settings/vlm-config', express.json(), (req, res) => {
-  const { provider, apiKey, model } = req.body || {};
-  if (!provider || !apiKey) {
-    return res.status(400).json({ error: 'provider and apiKey are required' });
+  const { provider, apiKey, model, baseUrl } = req.body || {};
+  if (!provider) {
+    return res.status(400).json({ error: 'provider is required' });
   }
   if (!vlm.PROVIDERS[provider]) {
-    return res.status(400).json({ error: `unknown provider "${provider}"; expected openai or anthropic` });
+    return res.status(400).json({ error: `unknown provider "${provider}"; expected openai, anthropic, or custom-openai` });
+  }
+  if (provider === 'custom-openai') {
+    if (!baseUrl) {
+      return res.status(400).json({ error: 'baseUrl is required for custom-openai provider' });
+    }
+  } else if (!apiKey) {
+    return res.status(400).json({ error: 'provider and apiKey are required' });
   }
   if (!model) {
     return res.status(400).json({ error: 'model is required; fetch available models via POST /settings/vlm-models first' });
   }
-  const settings = { provider, apiKey, model };
+  const settings = { provider, apiKey: apiKey || '', model, baseUrl: baseUrl || '' };
   writeSettings(settings);
-  res.json({ ok: true, provider, model: settings.model, apiKeySet: true });
+  res.json({ ok: true, provider, model: settings.model, baseUrl: settings.baseUrl, apiKeySet: !!settings.apiKey });
 });
 
 // ---------------------------------------------------------------------------
-// POST /settings/vlm-models — { provider, apiKey? } -> list models available
-// to this key, so the UI can require the user to pick one instead of typing
+// POST /settings/vlm-models — { provider, apiKey?, baseUrl? } -> list models available
+// to this key/url, so the UI can require the user to pick one instead of typing
 // a model string blind. POST (not GET+query) so the API key never lands in
 // a URL, access log, or browser history.
 // ---------------------------------------------------------------------------
 router.post('/settings/vlm-models', express.json(), async (req, res) => {
   const { provider } = req.body || {};
   const apiKey = req.body?.apiKey || readSettings().apiKey;
+  const baseUrl = req.body?.baseUrl || readSettings().baseUrl;
   if (!vlm.PROVIDERS[provider]) {
-    return res.status(400).json({ error: `unknown provider "${provider}"; expected openai or anthropic` });
+    return res.status(400).json({ error: `unknown provider "${provider}"; expected openai, anthropic, or custom-openai` });
   }
-  if (!apiKey) {
+  if (provider !== 'custom-openai' && !apiKey) {
     return res.status(400).json({ error: 'apiKey is required' });
   }
+  if (provider === 'custom-openai' && !baseUrl) {
+    return res.status(400).json({ error: 'baseUrl is required' });
+  }
   try {
-    const models = await vlm.PROVIDERS[provider].listModels(apiKey);
+    const models = await vlm.PROVIDERS[provider].listModels(apiKey, baseUrl);
     res.json({ models });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -790,6 +806,7 @@ router.get('/settings/vlm-config', (req, res) => {
   res.json({
     provider: settings.provider || null,
     model: settings.model || null,
+    baseUrl: settings.baseUrl || null,
     apiKeySet: !!settings.apiKey,
     apiKeySuffix: settings.apiKey ? settings.apiKey.slice(-4) : null,
   });
