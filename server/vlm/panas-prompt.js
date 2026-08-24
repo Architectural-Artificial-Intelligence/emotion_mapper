@@ -48,14 +48,24 @@ Respond with ONLY a valid JSON object in this exact format, no explanation:
  */
 function parsePANASResponse(responseText) {
   let jsonStr = (responseText || '').trim();
-  const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
-  if (jsonMatch) jsonStr = jsonMatch[0];
+  
+  // Attempt to extract from explicit markdown code block first
+  const codeBlockMatch = jsonStr.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/i);
+  if (codeBlockMatch) {
+    jsonStr = codeBlockMatch[1];
+  } else {
+    const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
+    if (jsonMatch) jsonStr = jsonMatch[0];
+  }
+
+  // Remove common open-source syntax errors like trailing commas before closing braces
+  jsonStr = jsonStr.replace(/,\s*([}\]])/g, '$1');
 
   let scores;
   try {
     scores = JSON.parse(jsonStr);
   } catch (e) {
-    throw new Error(`Failed to parse PANAS response as JSON: ${responseText.substring(0, 200)}`);
+    throw new Error(`Failed to parse PANAS response as JSON: ${responseText.substring(0, 400)}`);
   }
 
   const positiveScore = PANAS_POSITIVE.reduce((sum, item) => sum + (scores[item] || 0), 0);

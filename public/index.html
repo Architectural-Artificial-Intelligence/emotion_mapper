@@ -29,13 +29,17 @@
       <select id="settings-provider">
         <option value="openai">OpenAI</option>
         <option value="anthropic">Anthropic</option>
+        <option value="custom-openai">Custom (OpenAI-compatible)</option>
       </select>
+      <label id="settings-baseurl-label" style="display:none;">Base URL</label>
+      <input type="text" id="settings-baseurl" placeholder="http://localhost:11434/v1" style="display:none;" />
       <label>API Key</label>
       <input type="password" id="settings-apikey" placeholder="sk-..." />
       <label>Model</label>
       <select id="settings-model" required>
         <option value="">Enter API key, then load models&hellip;</option>
       </select>
+      <input type="text" id="settings-model-input" placeholder="Or type custom model name..." style="display:none; margin-top: 4px;" />
       <button class="secondary" id="settings-load-models" type="button">Load available models</button>
       <button class="action" id="settings-save">Save</button>
       <div class="status" id="settings-status"></div>
